@@ -46,7 +46,7 @@ public final class MainActivity extends ComponentActivity {
     private double aperture=4,seconds=1.0/60;
     private double displayedAperture=Double.NaN,displayedShutter=Double.NaN;
     private int isoIndex=2,nd=0,interval=1000;
-    private boolean manualF=true,paused,foreground,cameraStarting,regionSupported,showZoom=true;
+    private boolean manualF=true,paused,foreground,cameraStarting,regionSupported,focusSupported,showZoom=true;
     private float current=Float.NaN,maximum,zoom=1,minZoom=1,maxZoom=1;
     private ImageCapture jpegCapture; private boolean jpegBusy; private double jpegEv=Double.NaN; private volatile double latestEv=Double.NaN; private volatile int captureGeneration; private double currentEv=Double.NaN; private long lastFrameTime; private String meterStatus="等待相机测光";
     private boolean rawEnabled,rawSupported,rawActive,rawBusy;
@@ -109,7 +109,7 @@ private double[] enabled
 LinearLayout options=new LinearLayout(this);options.setGravity(Gravity.CENTER_VERTICAL);options.addView(text("ISO  ",12,MUTED));TextView iso=groupOption(ISOS[isoIndex]+"  ▾",false,false);LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(0,dp(38),1);ip.setMarginEnd(dp(12));options.addView(iso,ip);options.addView(text("ND  ",12,MUTED));String[] nds=new String[21];nds[0]="无";for(int i=1;i<21;i++)nds[i]=i+" 档";TextView filter=groupOption(nds[nd]+"  ▾",false,false);options.addView(filter,new LinearLayout.LayoutParams(0,dp(38),1));LinearLayout.LayoutParams op=new LinearLayout.LayoutParams(-1,dp(48));root.addView(options,op);iso.setOnClickListener(v->selectValue("ISO 感光度",ISOS,isoIndex,i->{isoIndex=i;iso.setText(ISOS[i]+"  ▾");save();render();}));filter.setOnClickListener(v->selectValue("ND 减光镜",nds,nd,i->{nd=i;filter.setText(nds[i]+"  ▾");save();render();}));
         FrameLayout square=new FrameLayout(this);square.setBackgroundColor(BG);
         preview=new PreviewView(this);preview.setImplementationMode(PreviewView.ImplementationMode.COMPATIBLE);preview.setScaleType(PreviewView.ScaleType.FILL_CENTER);square.addView(preview,new FrameLayout.LayoutParams(-1,-1));
-        spotMarker=new View(this){private final android.graphics.Paint p=new android.graphics.Paint(3);@Override protected void onDraw(android.graphics.Canvas c){super.onDraw(c);if(!regionSupported&&!rawActive)return;p.setColor(theme.accent);p.setStyle(android.graphics.Paint.Style.STROKE);p.setStrokeWidth(dp(1));if(rawActive){if(rawMode==2)return;RectF area=rawSelection(getWidth(),getHeight());c.drawOval(area,p);return;}float x=spotX*getWidth(),y=spotY*getHeight(),r=dp(18);c.drawRect(x-r,y-r,x+r,y+r,p);c.drawLine(x-dp(5),y,x+dp(5),y,p);c.drawLine(x,y-dp(5),x,y+dp(5),p);}};
+        spotMarker=new View(this){private final android.graphics.Paint p=new android.graphics.Paint(3);@Override protected void onDraw(android.graphics.Canvas c){super.onDraw(c);if(!regionSupported&&!focusSupported&&!rawActive)return;p.setColor(theme.accent);p.setStyle(android.graphics.Paint.Style.STROKE);p.setStrokeWidth(dp(1));if(rawActive){if(rawMode==2)return;RectF area=rawSelection(getWidth(),getHeight());c.drawOval(area,p);return;}float x=spotX*getWidth(),y=spotY*getHeight(),r=dp(18);c.drawRect(x-r,y-r,x+r,y+r,p);c.drawLine(x-dp(5),y,x+dp(5),y,p);c.drawLine(x,y-dp(5),x,y+dp(5),p);}};
         square.addView(spotMarker,new FrameLayout.LayoutParams(-1,-1));
         GestureDetector taps=new GestureDetector(this,new GestureDetector.SimpleOnGestureListener(){@Override public boolean onDown(MotionEvent e){return true;}@Override public boolean onSingleTapUp(MotionEvent e){meterAt(e.getX(),e.getY(),true);return true;}});
         square.setOnTouchListener((v,event)->{boolean handled=taps.onTouchEvent(event);if(event.getActionMasked()==MotionEvent.ACTION_UP)v.performClick();return handled;});
@@ -335,13 +335,15 @@ private void meterAt(float x,float y,boolean user){
         if(!paused){currentEv=Double.NaN;current=Float.NaN;meterStatus="RAW 测光中";requestRawReading();render();}
         return;
     }
-    if(!regionSupported){if(user)Toast.makeText(this,"此摄像头不支持区域测光",Toast.LENGTH_SHORT).show();return;}
+    int flags=(focusSupported?FocusMeteringAction.FLAG_AF:0)|(regionSupported?FocusMeteringAction.FLAG_AE:0);
+    if(flags==0){if(user)Toast.makeText(this,"此摄像头不支持点击对焦或区域测光",Toast.LENGTH_SHORT).show();return;}
     MeteringPoint point=preview.getMeteringPointFactory().createPoint(x,y,.1f);
-    FocusMeteringAction action=new FocusMeteringAction.Builder(point,FocusMeteringAction.FLAG_AE|FocusMeteringAction.FLAG_AF).disableAutoCancel().build();
-    if(!camera.getCameraInfo().isFocusMeteringSupported(action)){if(user)Toast.makeText(this,"此位置不支持区域测光",Toast.LENGTH_SHORT).show();return;}
+    FocusMeteringAction action=new FocusMeteringAction.Builder(point,flags).disableAutoCancel().build();
+    if(!camera.getCameraInfo().isFocusMeteringSupported(action)){if(user)Toast.makeText(this,"此位置不支持对焦或测光",Toast.LENGTH_SHORT).show();return;}
     int request=++spotRequest,generation=captureGeneration;
     ListenableFuture<FocusMeteringResult> future=camera.getCameraControl().startFocusAndMetering(action);
-    future.addListener(()->{if(request!=spotRequest||generation!=captureGeneration||!foreground)return;try{future.get();spotX=Math.max(0,Math.min(1,x/preview.getWidth()));spotY=Math.max(0,Math.min(1,y/preview.getHeight()));spotMarker.invalidate();jpegEv=Double.NaN;}catch(Exception e){android.util.Log.w("Lux","Region metering failed",e);if(user)Toast.makeText(this,"区域测光失败，请重试",Toast.LENGTH_SHORT).show();}},ContextCompat.getMainExecutor(this));
+    spotX=Math.max(0,Math.min(1,x/preview.getWidth()));spotY=Math.max(0,Math.min(1,y/preview.getHeight()));spotMarker.invalidate();
+    future.addListener(()->{if(request!=spotRequest||generation!=captureGeneration||!foreground)return;try{future.get();jpegEv=Double.NaN;}catch(Exception e){android.util.Log.w("Lux","Focus/metering failed",e);if(user)Toast.makeText(this,"对焦或测光失败，请重试",Toast.LENGTH_SHORT).show();}},ContextCompat.getMainExecutor(this));
 }
 private void applyZoom
 
@@ -385,7 +387,8 @@ private void applyZoom
             Preview useCase=builder.build();useCase.setSurfaceProvider(preview.getSurfaceProvider());provider.unbindAll();ImageCapture capture=captureBuilder.build();
             camera=provider.bindToLifecycle(this,selector,useCase,capture);rawActive=useRaw;
             if(useRaw){rawCapture=capture;jpegCapture=null;meterStatus="RAW 等待曝光稳定";}else{jpegCapture=capture;rawCapture=null;}
-            Integer regions=characteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AE);regionSupported=regions!=null&&regions>0;
+            Integer regions=Camera2CameraInfo.from(camera.getCameraInfo()).getCameraCharacteristic(CameraCharacteristics.CONTROL_MAX_REGIONS_AE);regionSupported=regions!=null&&regions>0;
+            Integer focusRegions=Camera2CameraInfo.from(camera.getCameraInfo()).getCameraCharacteristic(CameraCharacteristics.CONTROL_MAX_REGIONS_AF);focusSupported=focusRegions!=null&&focusRegions>0;
             ZoomState z=camera.getCameraInfo().getZoomState().getValue();if(z!=null){minZoom=z.getMinZoomRatio();maxZoom=z.getMaxZoomRatio();}
             if(regionSupported)applyZoom(zoom);else zoom=z==null?1:z.getZoomRatio();
             cameraMessage.setVisibility(View.GONE);spotMarker.invalidate();updateRawControls();
@@ -413,7 +416,7 @@ private void applyZoom
         captureGeneration++;rawRevision++;rawActive=false;rawBusy=false;rawCapture=null;
         if(rawMeter!=null){rawMeter.close();rawMeter=null;}
         jpegCapture=null;jpegBusy=false;jpegEv=Double.NaN;latestEv=Double.NaN;
-        if(provider!=null)provider.unbindAll();camera=null;regionSupported=false;
+        if(provider!=null)provider.unbindAll();camera=null;regionSupported=false;focusSupported=false;
     }
     @Override protected void onDestroy(){if(settingsDialog!=null)settingsDialog.dismiss();if(informationDialog!=null)informationDialog.dismiss();rawExecutor.shutdown();super.onDestroy();}
     @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){super.onRequestPermissionsResult(code,permissions,results);if(code==10){if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)startCamera();else cameraMessage.setText("未授权相机 · 点击重试或在系统设置开启");}}
