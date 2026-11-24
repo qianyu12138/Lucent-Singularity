@@ -56,6 +56,7 @@ public final class MainActivity extends ComponentActivity {
     private final ExecutorService rawExecutor=Executors.newSingleThreadExecutor();
     private LinearLayout settingsRawSection;
     private Switch settingsRawSwitch;
+    private TextView settingsRawNote;
     private ProcessCameraProvider provider;private Camera camera;
     private PreviewView preview; private View spotMarker; private float spotX=.5f,spotY=.5f; private int spotRequest;
     private TextView status,luxText,evText,maxText,cameraMessage,rawBadge,sourceText;
@@ -163,7 +164,7 @@ if(shutterDial==null)return;status.setText(paused?"读数已保持":meterStatus)
         timing.setOnClickListener(v->{int current=0;for(int i=0;i<periods.length;i++)if(periods[i]==interval)current=i;selectValue("识别间隔",labels,current,i->{interval=periods[i];timing.setText(labels[i]+"  ▾");save();handler.removeCallbacks(sample);if(foreground)handler.postDelayed(sample,interval);});});
         settingsRawSection=column();settingsRawSection.setPadding(0,dp(12),0,0);measurement.addView(settingsRawSection);
         settingsRawSwitch=new Switch(this);settingsRawSwitch.setText("RAW 测光");settingsRawSwitch.setTextSize(14);settingsRawSwitch.setTextColor(color(FG));settingsRawSwitch.setPadding(0,dp(8),0,dp(8));settingsRawSwitch.setThumbTintList(controlTint());settingsRawSwitch.setTrackTintList(new android.content.res.ColorStateList(new int[][]{{android.R.attr.state_checked},{}},new int[]{0x55000000|(theme.accent&0x00ffffff),color(0x559aa397)}));settingsRawSwitch.setChecked(rawEnabled);settingsRawSection.addView(settingsRawSwitch,new LinearLayout.LayoutParams(-1,dp(48)));
-        TextView rawNote=text("读取选区原始像素，以相机测光为基准校正。关闭后使用普通相机测光，Lux 均为估算值。",11,MUTED);rawNote.setPadding(0,dp(4),0,dp(4));rawNote.setLineSpacing(dp(3),1);settingsRawSection.addView(rawNote);updateRawControls();settingsRawSwitch.setOnCheckedChangeListener((v,on)->{if(on!=rawEnabled)setRawMode(on);});
+        settingsRawNote=text("",11,MUTED);settingsRawNote.setPadding(0,dp(4),0,dp(4));settingsRawNote.setLineSpacing(dp(3),1);settingsRawSection.addView(settingsRawNote);updateRawControls();settingsRawSwitch.setOnCheckedChangeListener((v,on)->{if(on!=rawEnabled)setRawMode(on);});
         LinearLayout cameraSettings=card();LinearLayout.LayoutParams cameraLp=new LinearLayout.LayoutParams(-1,-2);cameraLp.topMargin=dp(14);panel.addView(cameraSettings,cameraLp);cameraSettings.addView(text("相机",14,FG));
         Switch visible=new Switch(this);visible.setText("在主页面显示焦距拨轮");visible.setTextSize(13);visible.setTextColor(color(FG));visible.setPadding(0,dp(12),0,dp(8));visible.setThumbTintList(controlTint());visible.setTrackTintList(new android.content.res.ColorStateList(new int[][]{{android.R.attr.state_checked},{}},new int[]{0x55000000|(theme.accent&0x00ffffff),color(0x559aa397)}));visible.setChecked(showZoom);cameraSettings.addView(visible);
         TextView zoomNote=text("关闭后，仅在此处调节焦距",11,MUTED);zoomNote.setPadding(0,dp(4),0,dp(12));cameraSettings.addView(zoomNote);visible.setOnCheckedChangeListener((v,on)->{showZoom=on;save();renderZoom();});
@@ -175,7 +176,7 @@ if(shutterDial==null)return;status.setText(paused?"读数已保持":meterStatus)
         information.setOnClickListener(v->{settingsDialog.dismiss();showInformation();});
         ScrollView scroll=new ScrollView(this);scroll.setClipToPadding(false);scroll.addView(panel);settingsScroll=scroll;
         AlertDialog dialog=new AlertDialog.Builder(this).setCustomTitle(dialogTitle("测光设置")).setView(scroll).setPositiveButton("完成",null).create();settingsDialog=dialog;
-        dialog.setOnDismissListener(v->{settingsScrollY=scroll.getScrollY();settingsZoom=null;settingsZoomLabel=null;settingsCameraNote=null;settingsRawSection=null;settingsRawSwitch=null;settingsScroll=null;settingsDialog=null;});dialog.show();styleDialog(dialog);scroll.post(()->scroll.scrollTo(0,settingsScrollY));
+        dialog.setOnDismissListener(v->{settingsScrollY=scroll.getScrollY();settingsZoom=null;settingsZoomLabel=null;settingsCameraNote=null;settingsRawSection=null;settingsRawSwitch=null;settingsRawNote=null;settingsScroll=null;settingsDialog=null;});dialog.show();styleDialog(dialog);scroll.post(()->scroll.scrollTo(0,settingsScrollY));
     }
     private void showInformation(){
         if(informationDialog!=null&&informationDialog.isShowing())return;
@@ -260,9 +261,12 @@ private void requestJpegReading(){
 }
 private void updateRawControls(){
     if(settingsRawSection==null)return;
-    settingsRawSection.setVisibility(rawSupported?View.VISIBLE:View.GONE);
-    settingsRawSwitch.setEnabled(camera!=null&&!cameraStarting);
+    boolean available=rawSupported&&camera!=null&&!cameraStarting;
+    settingsRawSwitch.setEnabled(available);
+    settingsRawSwitch.setAlpha(available?1f:.55f);
     settingsRawSwitch.setChecked(rawEnabled);
+    settingsRawNote.setText(cameraStarting?"正在检测当前摄像头的 RAW 支持情况…":camera==null?"开启相机后可检测 RAW 支持情况。":rawSupported?
+        "读取选区原始像素，以相机测光为基准校正。关闭后使用普通相机测光，Lux 均为估算值。":"当前摄像头不支持 RAW 测光，使用普通相机测光。");
 }
 private void setRawMode(boolean enabled){
     if(enabled&&!rawSupported)return;
