@@ -10,16 +10,16 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 
-/** Finite camera-style dial. Position is fractional for automatic readings. */
+/** Finite camera-style dial with smooth dragging and discrete stop selection. */
 final class DialView extends View {
     interface Listener { void manual(); void changed(int index); default void groups() {} default void selectValue() {} }
     private final Paint paint = new Paint(3);
     private ThemeColors theme = ThemeColors.OPTIONS[0];
     private double[] values = {1};
     private String title = "", value = "—", hint = "";
-    private boolean manual, warning, zoom, dragging, longTriggered;
-    private float position, startX, startY, startPosition;
-    private int lastHapticIndex;
+    private boolean manual, warning, zoom, dragging, longTriggered, valuePressed, gestureCanceled;
+    private float position, startX, startY, lastX;
+    private int selectedIndex;
     private boolean holding;
     private long holdStarted;
     private Listener listener;
@@ -28,7 +28,7 @@ final class DialView extends View {
     void listener(Listener value) { listener = value; }
     void theme(ThemeColors value) { theme = value; invalidate(); }
     void display(String title, String value, double[] stops, double actual, boolean manual, boolean warning, String hint, boolean zoom) {
-        this.title=title;this.value=value;this.values=stops;this.position=(float) position(stops,actual);this.manual=manual;this.warning=warning;this.hint=hint;this.zoom=zoom;
+        this.title=title;this.value=value;this.values=stops;if(!dragging)this.position=(float) position(stops,actual);this.manual=manual;this.warning=warning;this.hint=hint;this.zoom=zoom;
         setContentDescription(title+" "+value+" "+hint); invalidate();
     }
     static double position(double[] values, double value) {
@@ -74,16 +74,62 @@ text(c,title,d(13),d(22),12,muted);
 if(holding&&!zoom){float progress=Math.min(1f,(android.os.SystemClock.uptimeMillis()-holdStarted)/5000f);paint.setColor(gold);c.drawRoundRect(d(10),h-d(4),d(10)+(w-d(20))*progress,h-d(1),d(1),d(1),paint);postInvalidateOnAnimation();}
 if(!isEnabled()){paint.setColor(theme.color(0xaa141716));c.drawRoundRect(0,0,w,h,d(9),d(9),paint);}
     }
+    private boolean onValue(float x,float y){
+        paint.setTextSize(d(29));
+        return !zoom&&x>=d(8)&&x<=Math.min(getWidth()-d(8),d(18)+paint.measureText(value))&&y>=d(28)&&y<=d(70);
+    }
+    private void selectStop(int index){
+        if(index==selectedIndex)return;
+        selectedIndex=index;
+        if(listener!=null)listener.changed(index);
+        performHapticFeedback(android.os.Build.VERSION.SDK_INT>=android.os.Build.VERSION_CODES.R?android.view.HapticFeedbackConstants.CONFIRM:android.view.HapticFeedbackConstants.LONG_PRESS);
+    }
+    private void dragTo(float x){
+        // Incremental movement discards travel beyond either end, so reversing responds immediately.
+        position=Math.max(0,Math.min(values.length-1,position-(x-lastX)/d(22)));
+        lastX=x;
+        // Commit only after a tick crosses the pointer, rather than halfway between ticks.
+        if(position>=selectedIndex+1)selectStop((int)Math.floor(position));
+        else if(position<=selectedIndex-1)selectStop((int)Math.ceil(position));
+        invalidate();
+    }
     @Override public boolean onTouchEvent(MotionEvent e){
         if(!isEnabled())return false;
         switch(e.getActionMasked()){
-            case MotionEvent.ACTION_DOWN:startX=e.getX();startY=e.getY();startPosition=position;lastHapticIndex=Math.round(position);dragging=false;longTriggered=false;holding=!zoom;holdStarted=android.os.SystemClock.uptimeMillis();if(!zoom)postDelayed(longPress,5000);invalidate();return true;
+            case MotionEvent.ACTION_DOWN:
+                startX=lastX=e.getX();startY=e.getY();selectedIndex=Math.round(position);
+                dragging=false;longTriggered=false;gestureCanceled=false;valuePressed=onValue(startX,startY);
+                holding=valuePressed;holdStarted=android.os.SystemClock.uptimeMillis();
+                if(holding)postDelayed(longPress,5000);
+                invalidate();return true;
             case MotionEvent.ACTION_MOVE:
+                if(longTriggered||gestureCanceled)return true;
                 float dx=e.getX()-startX,dy=e.getY()-startY;
-                if(longTriggered)return true;float slop=Math.max(d(16),ViewConfiguration.get(getContext()).getScaledTouchSlop()*2f);if(!dragging&&Math.abs(dy)>Math.max(slop,Math.abs(dx))){holding=false;removeCallbacks(longPress);invalidate();return true;}
-                if(dragging||Math.abs(dx)>slop){holding=false;dragging=true;removeCallbacks(longPress);if(manual){dragging=true;getParent().requestDisallowInterceptTouchEvent(true);float next=Math.max(0,Math.min(values.length-1,startPosition-dx/d(22)));int index=Math.round(next);if(index!=lastHapticIndex){lastHapticIndex=index;performHapticFeedback(android.os.Build.VERSION.SDK_INT>=android.os.Build.VERSION_CODES.R?android.view.HapticFeedbackConstants.CONFIRM:android.view.HapticFeedbackConstants.LONG_PRESS);}if(listener!=null)listener.changed(index);position=next;invalidate();}}return true;
-            case MotionEvent.ACTION_UP:holding=false;removeCallbacks(longPress);getParent().requestDisallowInterceptTouchEvent(false);if(listener!=null&&manual&&dragging)listener.changed(Math.round(position));if(!dragging&&!longTriggered&&!zoom&&listener!=null){if(manual&&startY>=d(28)&&startY<=d(70)&&e.getY()>=d(28)&&e.getY()<=d(70))listener.selectValue();else listener.manual();}performClick();invalidate();return true;
-            case MotionEvent.ACTION_CANCEL:holding=false;invalidate();removeCallbacks(longPress);getParent().requestDisallowInterceptTouchEvent(false);return true;
+                float slop=ViewConfiguration.get(getContext()).getScaledTouchSlop();
+                if(valuePressed){
+                    if(Math.abs(dx)>slop||Math.abs(dy)>slop||!onValue(e.getX(),e.getY())){
+                        holding=false;gestureCanceled=true;removeCallbacks(longPress);invalidate();
+                    }
+                    return true;
+                }
+                if(!dragging&&Math.abs(dy)>Math.max(slop,Math.abs(dx))){gestureCanceled=true;return true;}
+                if(manual&&(dragging||Math.abs(dx)>Math.abs(dy))){
+                    dragging=true;getParent().requestDisallowInterceptTouchEvent(true);dragTo(e.getX());
+                }else if(Math.abs(dx)>slop)gestureCanceled=true;
+                return true;
+            case MotionEvent.ACTION_UP:
+                holding=false;removeCallbacks(longPress);getParent().requestDisallowInterceptTouchEvent(false);
+                if(dragging){dragTo(e.getX());position=Math.round(position);selectStop((int)position);}
+                else if(!gestureCanceled&&!longTriggered&&!zoom&&listener!=null){
+                    if(manual&&valuePressed&&onValue(e.getX(),e.getY()))listener.selectValue();
+                    else listener.manual();
+                    performClick();
+                }
+                dragging=false;invalidate();return true;
+            case MotionEvent.ACTION_CANCEL:
+                holding=false;removeCallbacks(longPress);getParent().requestDisallowInterceptTouchEvent(false);
+                if(dragging)position=selectedIndex;
+                dragging=false;invalidate();return true;
             default:return true;
         }
     }
