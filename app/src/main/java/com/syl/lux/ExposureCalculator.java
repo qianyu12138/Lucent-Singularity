@@ -19,6 +19,15 @@ static double cameraEv(Float aperture, Integer iso, Long exposureNanos) {
     return Math.log(aperture* (double)aperture/(exposureNanos/1e9))/Math.log(2)-Math.log(iso/100.0)/Math.log(2);
 }
 
+    static double targetEv(double aperture,double seconds,double iso,double nd) {
+        requirePositive(aperture,seconds,iso);
+        return Math.log(aperture*aperture/seconds)/Math.log(2)-Math.log(iso/100)/Math.log(2)+nd;
+    }
+
+    static double previewStops(double cameraEv,double targetEv,double calibration) {
+        return cameraEv-targetEv+calibration;
+    }
+
 private static void requirePositive
 (double... values) {
         for (double value : values) {
