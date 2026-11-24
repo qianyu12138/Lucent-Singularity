@@ -2,7 +2,6 @@ package com.syl.lux;
 
 import android.content.Context;
 import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -53,11 +52,11 @@ final class DialView extends View {
             new float[]{0, edge*.5f, edge, 1-edge, 1-edge*.5f, 1}, Shader.TileMode.CLAMP));
     }
 @Override protected void onDraw(Canvas c){
-        super.onDraw(c);int gold=theme.accent,muted=theme.color(0xff9aa397),red=Color.rgb(240,106,98),fg=theme.color(0xfff1f3eb);
-        float w=getWidth(),h=getHeight();paint.setColor(warning?0xff302321:theme.color(manual&&!zoom?0xff302c22:0xff202421));c.drawRoundRect(0,0,w,h,d(9),d(9),paint);
+        super.onDraw(c);int gold=theme.accent,muted=theme.color(0xff9aa397),red=theme.warning,fg=theme.color(0xfff1f3eb);
+        float w=getWidth(),h=getHeight();paint.setColor(warning?theme.warningBackground:theme.color(manual&&!zoom?0xff302c22:0xff202421));c.drawRoundRect(0,0,w,h,d(9),d(9),paint);
         paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(d(1));paint.setColor(warning?red:manual?gold:theme.color(0xff363c36));c.drawRoundRect(d(1),d(1),w-d(1),h-d(1),d(9),d(9),paint);paint.setStyle(Paint.Style.FILL);
 if(zoom){
-    text(c,title,d(12),d(19),11,muted);text(c,value,w-d(65),d(19),16,gold);
+    text(c,title,d(12),d(19),11,muted);text(c,value,w-d(65),d(19),16,theme.accentInk);
     c.save();c.clipRect(d(10),d(27),w-d(10),d(53));paint.setColor(isEnabled()?gold:muted);paint.setStrokeWidth(d(1));
     tickFade(w,isEnabled()?gold:muted);for(int i=0;i<values.length;i++){float x=w/2+(i-position)*d(22);c.drawLine(x,d(28),x,d(49),paint);}paint.setShader(null);c.restore();
     paint.setColor(red);Path pointer=new Path();pointer.moveTo(w/2,d(54));pointer.lineTo(w/2-d(4),d(60));pointer.lineTo(w/2+d(4),d(60));pointer.close();c.drawPath(pointer,paint);centerText(c,hint,w/2,d(72),10,muted);
@@ -65,8 +64,8 @@ if(zoom){
 }
 text(c,title,d(13),d(22),12,muted);
 
-        if(!zoom)text(c,manual?"MANUAL":"AUTO",w-d(manual?67:48),d(22),10,manual?gold:muted);
-        text(c,value,d(13),d(62),zoom?21:29,warning?red:manual?gold:fg);
+        if(!zoom)text(c,manual?"MANUAL":"AUTO",w-d(manual?67:48),d(22),10,manual?theme.accentInk:muted);
+        text(c,value,d(13),d(62),zoom?21:29,warning?red:manual?theme.manualText:fg);
         c.save();c.clipRect(d(10),d(73),w-d(10),h-d(30));
         paint.setStrokeWidth(d(1));paint.setColor(warning?red:manual?gold:muted);
         tickFade(w,warning?red:manual?gold:muted);for(int i=0;i<values.length;i++){float x=w/2+(i-position)*d(22);c.drawLine(x,d(78),x,h-d(34),paint);}paint.setShader(null);c.restore();

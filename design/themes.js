@@ -58,10 +58,10 @@
       source: 'https://ethanschoonover.com/solarized/',
       colors: {
         bg: '#fdf6e3', stage: '#eee8d5', surface: '#eee8d5', card: '#eee8d5',
-        input: '#fdf6e3', line: '#93a1a1', text: '#586e75', muted: '#586e75',
-        accent: '#268bd2', 'accent-ink': '#586e75', selected: '#eee8d5',
-        'selected-line': '#268bd2', 'manual-text': '#586e75', 'manual-label': '#586e75',
-        'state-bg': '#fdf6e3', 'state-text': '#586e75', 'on-accent': '#fdf6e3',
+        input: '#fdf6e3', line: '#93a1a1', text: '#566c73', muted: '#566c73',
+        accent: '#268bd2', 'accent-ink': '#566c73', selected: '#eee8d5',
+        'selected-line': '#268bd2', 'manual-text': '#566c73', 'manual-label': '#566c73',
+        'state-bg': '#fdf6e3', 'state-text': '#566c73', 'on-accent': '#fdf6e3',
         danger: '#dc322f', 'danger-text': '#cb4b16', 'danger-bg': '#fdf6e3'
       }
     },
