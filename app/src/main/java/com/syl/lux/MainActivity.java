@@ -69,7 +69,7 @@ public final class MainActivity extends ComponentActivity {
         prefs=getSharedPreferences("meter",MODE_PRIVATE);theme=ThemeColors.OPTIONS[prefs.getInt(ThemeColors.PREFERENCE,0)];migrateStops();fs=enabled(ALL_F,"f");ts=enabled(ALL_T,"t");
         aperture=nearest(fs,prefs.getFloat("aperture",4));seconds=nearest(ts,prefs.getFloat("seconds",1f/60));
         isoIndex=prefs.getInt("iso",2);nd=prefs.getInt("nd",0);interval=prefs.getInt("interval",1000);manualF=prefs.getBoolean("manualF",true);showZoom=prefs.getBoolean("showZoom",true);zoom=prefs.getFloat("zoom",1);
-        rawEnabled=prefs.getBoolean("rawMetering",false);rawMode=prefs.getInt("rawMode",0);
+        rawEnabled=prefs.getBoolean("rawMetering",false);rawMode=prefs.getInt("rawMode",1);
         if(state!=null){currentEv=state.getDouble("ev",Double.NaN);current=state.getFloat("current",Float.NaN);maximum=state.getFloat("maximum");paused=state.getBoolean("paused");}
 
         buildPage();render();
@@ -165,7 +165,8 @@ if(shutterDial==null)return;status.setText(paused?"读数已保持":meterStatus)
         settingsRawSection=column();settingsRawSection.setPadding(0,dp(12),0,0);measurement.addView(settingsRawSection);
         settingsRawSwitch=new Switch(this);settingsRawSwitch.setText("RAW 测光");settingsRawSwitch.setTextSize(14);settingsRawSwitch.setTextColor(color(FG));settingsRawSwitch.setPadding(0,dp(8),0,dp(8));settingsRawSwitch.setThumbTintList(controlTint());settingsRawSwitch.setTrackTintList(new android.content.res.ColorStateList(new int[][]{{android.R.attr.state_checked},{}},new int[]{0x55000000|(theme.accent&0x00ffffff),color(0x559aa397)}));settingsRawSwitch.setChecked(rawEnabled);settingsRawSection.addView(settingsRawSwitch,new LinearLayout.LayoutParams(-1,dp(48)));
         settingsRawNote=text("",11,MUTED);settingsRawNote.setPadding(0,dp(4),0,dp(4));settingsRawNote.setLineSpacing(dp(3),1);settingsRawSection.addView(settingsRawNote);updateRawControls();settingsRawSwitch.setOnCheckedChangeListener((v,on)->{if(on!=rawEnabled)setRawMode(on);});
-        settingsRawMode=groupOption("",false,false);LinearLayout.LayoutParams modeLp=new LinearLayout.LayoutParams(-1,dp(48));modeLp.topMargin=dp(8);settingsRawSection.addView(settingsRawMode,modeLp);
+        TextView modeLabel=text("测光模式（RAW）",12,MUTED);modeLabel.setPadding(0,dp(12),0,dp(6));settingsRawSection.addView(modeLabel);
+        settingsRawMode=groupOption("",false,false);settingsRawSection.addView(settingsRawMode,new LinearLayout.LayoutParams(-1,dp(48)));
         settingsRawMode.setOnClickListener(v->selectValue("RAW 测光模式",RawMeter.MODES,rawMode,i->{rawMode=i;prefs.edit().putInt("rawMode",i).apply();rawRevision++;maximum=0;spotMarker.invalidate();updateRawControls();if(rawActive&&!paused){currentEv=Double.NaN;current=Float.NaN;meterStatus="RAW 测光中";requestRawReading();}render();}));updateRawControls();
         LinearLayout cameraSettings=card();LinearLayout.LayoutParams cameraLp=new LinearLayout.LayoutParams(-1,-2);cameraLp.topMargin=dp(14);panel.addView(cameraSettings,cameraLp);cameraSettings.addView(text("相机",14,FG));
         Switch visible=new Switch(this);visible.setText("在主页面显示焦距拨轮");visible.setTextSize(13);visible.setTextColor(color(FG));visible.setPadding(0,dp(12),0,dp(8));visible.setThumbTintList(controlTint());visible.setTrackTintList(new android.content.res.ColorStateList(new int[][]{{android.R.attr.state_checked},{}},new int[]{0x55000000|(theme.accent&0x00ffffff),color(0x559aa397)}));visible.setChecked(showZoom);cameraSettings.addView(visible);
