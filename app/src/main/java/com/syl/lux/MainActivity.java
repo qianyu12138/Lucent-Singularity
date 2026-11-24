@@ -50,13 +50,13 @@ public final class MainActivity extends ComponentActivity {
     private float current=Float.NaN,maximum,zoom=1,minZoom=1,maxZoom=1;
     private ImageCapture jpegCapture; private boolean jpegBusy; private double jpegEv=Double.NaN; private volatile double latestEv=Double.NaN; private volatile int captureGeneration; private double currentEv=Double.NaN; private long lastFrameTime; private String meterStatus="等待相机测光";
     private boolean rawEnabled,rawSupported,rawActive,rawBusy;
-    private int rawRevision;
+    private int rawRevision,rawMode;
     private ImageCapture rawCapture;
     private RawMeter rawMeter;
     private final ExecutorService rawExecutor=Executors.newSingleThreadExecutor();
     private LinearLayout settingsRawSection;
     private Switch settingsRawSwitch;
-    private TextView settingsRawNote;
+    private TextView settingsRawNote,settingsRawMode;
     private ProcessCameraProvider provider;private Camera camera;
     private PreviewView preview; private View spotMarker; private float spotX=.5f,spotY=.5f; private int spotRequest;
     private TextView status,luxText,evText,maxText,cameraMessage,rawBadge,sourceText;
@@ -69,7 +69,7 @@ public final class MainActivity extends ComponentActivity {
         prefs=getSharedPreferences("meter",MODE_PRIVATE);theme=ThemeColors.OPTIONS[prefs.getInt(ThemeColors.PREFERENCE,0)];migrateStops();fs=enabled(ALL_F,"f");ts=enabled(ALL_T,"t");
         aperture=nearest(fs,prefs.getFloat("aperture",4));seconds=nearest(ts,prefs.getFloat("seconds",1f/60));
         isoIndex=prefs.getInt("iso",2);nd=prefs.getInt("nd",0);interval=prefs.getInt("interval",1000);manualF=prefs.getBoolean("manualF",true);showZoom=prefs.getBoolean("showZoom",true);zoom=prefs.getFloat("zoom",1);
-        rawEnabled=prefs.getBoolean("rawMetering",false);
+        rawEnabled=prefs.getBoolean("rawMetering",false);rawMode=prefs.getInt("rawMode",0);
         if(state!=null){currentEv=state.getDouble("ev",Double.NaN);current=state.getFloat("current",Float.NaN);maximum=state.getFloat("maximum");paused=state.getBoolean("paused");}
 
         buildPage();render();
@@ -109,7 +109,7 @@ private double[] enabled
 LinearLayout options=new LinearLayout(this);options.setGravity(Gravity.CENTER_VERTICAL);options.addView(text("ISO  ",12,MUTED));TextView iso=groupOption(ISOS[isoIndex]+"  ▾",false,false);LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(0,dp(38),1);ip.setMarginEnd(dp(12));options.addView(iso,ip);options.addView(text("ND  ",12,MUTED));String[] nds=new String[21];nds[0]="无";for(int i=1;i<21;i++)nds[i]=i+" 档";TextView filter=groupOption(nds[nd]+"  ▾",false,false);options.addView(filter,new LinearLayout.LayoutParams(0,dp(38),1));LinearLayout.LayoutParams op=new LinearLayout.LayoutParams(-1,dp(48));root.addView(options,op);iso.setOnClickListener(v->selectValue("ISO 感光度",ISOS,isoIndex,i->{isoIndex=i;iso.setText(ISOS[i]+"  ▾");save();render();}));filter.setOnClickListener(v->selectValue("ND 减光镜",nds,nd,i->{nd=i;filter.setText(nds[i]+"  ▾");save();render();}));
         FrameLayout square=new FrameLayout(this);square.setBackgroundColor(BG);
         preview=new PreviewView(this);preview.setImplementationMode(PreviewView.ImplementationMode.COMPATIBLE);preview.setScaleType(PreviewView.ScaleType.FILL_CENTER);square.addView(preview,new FrameLayout.LayoutParams(-1,-1));
-        spotMarker=new View(this){private final android.graphics.Paint p=new android.graphics.Paint(3);@Override protected void onDraw(android.graphics.Canvas c){super.onDraw(c);if(!regionSupported&&!rawActive)return;p.setColor(theme.accent);p.setStyle(android.graphics.Paint.Style.STROKE);p.setStrokeWidth(dp(1));float x=spotX*getWidth(),y=spotY*getHeight(),r=dp(18);c.drawRect(x-r,y-r,x+r,y+r,p);c.drawLine(x-dp(5),y,x+dp(5),y,p);c.drawLine(x,y-dp(5),x,y+dp(5),p);}};
+        spotMarker=new View(this){private final android.graphics.Paint p=new android.graphics.Paint(3);@Override protected void onDraw(android.graphics.Canvas c){super.onDraw(c);if(!regionSupported&&!rawActive)return;p.setColor(theme.accent);p.setStyle(android.graphics.Paint.Style.STROKE);p.setStrokeWidth(dp(1));if(rawActive){if(rawMode==2)return;RectF area=rawSelection(getWidth(),getHeight());c.drawOval(area,p);return;}float x=spotX*getWidth(),y=spotY*getHeight(),r=dp(18);c.drawRect(x-r,y-r,x+r,y+r,p);c.drawLine(x-dp(5),y,x+dp(5),y,p);c.drawLine(x,y-dp(5),x,y+dp(5),p);}};
         square.addView(spotMarker,new FrameLayout.LayoutParams(-1,-1));
         GestureDetector taps=new GestureDetector(this,new GestureDetector.SimpleOnGestureListener(){@Override public boolean onDown(MotionEvent e){return true;}@Override public boolean onSingleTapUp(MotionEvent e){meterAt(e.getX(),e.getY(),true);return true;}});
         square.setOnTouchListener((v,event)->{boolean handled=taps.onTouchEvent(event);if(event.getActionMasked()==MotionEvent.ACTION_UP)v.performClick();return handled;});
@@ -145,7 +145,7 @@ private void updateScreenAwake(){
 }
 private void render(){
 updateScreenAwake();
-if(rawBadge!=null){rawBadge.setVisibility(rawActive?View.VISIBLE:View.GONE);sourceText.setText(rawActive?"RAW 测光\n换算 Lux":"相机测光\n换算 Lux");}
+if(rawBadge!=null){rawBadge.setVisibility(rawActive?View.VISIBLE:View.GONE);sourceText.setText(rawActive?RawMeter.MODES[rawMode]+"\n换算 Lux":"相机测光\n换算 Lux");}
 if(shutterDial==null)return;status.setText(paused?"读数已保持":meterStatus);hold.setText(paused?"继续测光":"暂停测光");hold.setEnabled(camera!=null);luxText.setText(Float.isFinite(current)?String.format(Locale.US,"%d",(int)current):"—");evText.setText(current>0?String.format(Locale.US,"%.1f",currentEv):"—");maxText.setText(String.format(Locale.US,"最高 %.1f lx",maximum));double a=aperture,t=seconds;boolean valid=Double.isFinite(currentEv);double effective=Math.pow(2,currentEv)*2.5/Math.pow(2,nd);if(valid){if(manualF)t=ExposureCalculator.shutterSeconds(effective,Double.parseDouble(ISOS[isoIndex]),a);else a=ExposureCalculator.aperture(effective,Double.parseDouble(ISOS[isoIndex]),t);}renderDial(apertureDial,"光圈",fs,a,manualF,valid,true);renderDial(shutterDial,"快门速度",ts,t,!manualF,valid,false);renderZoom();}
     private void renderDial(DialView dial,String title,double[] stops,double raw,boolean manual,boolean valid,boolean isF){double min=Arrays.stream(stops).min().getAsDouble(),max=Arrays.stream(stops).max().getAsDouble();boolean low=raw<min*(1-1e-9),high=raw>max*(1+1e-9),warning=valid&&!manual&&(low||high);double value=warning?Math.max(min,Math.min(max,raw)):valid&&!manual?nearest(stops,raw):raw;if(isF)displayedAperture=valid||manual?value:Double.NaN;else displayedShutter=valid||manual?value:Double.NaN;String label=!valid&&!manual?"—":isF?apertureLabel(value):shutterLabel(value);String hint=warning?(isF?(low?"高于上限":"低于下限"):(low?"低于下限":"超过上限")):manual?"‹ 左右拨动 ›":valid?"自动跟随":"等待有效照度";dial.display(title,label,stops,value,manual,warning,hint,false);}
     private void save(){prefs.edit().putFloat("aperture",(float)aperture).putFloat("seconds",(float)seconds).putInt("iso",isoIndex).putInt("nd",nd).putInt("interval",interval).putBoolean("manualF",manualF).putBoolean("showZoom",showZoom).putFloat("zoom",zoom).apply();}
@@ -165,6 +165,8 @@ if(shutterDial==null)return;status.setText(paused?"读数已保持":meterStatus)
         settingsRawSection=column();settingsRawSection.setPadding(0,dp(12),0,0);measurement.addView(settingsRawSection);
         settingsRawSwitch=new Switch(this);settingsRawSwitch.setText("RAW 测光");settingsRawSwitch.setTextSize(14);settingsRawSwitch.setTextColor(color(FG));settingsRawSwitch.setPadding(0,dp(8),0,dp(8));settingsRawSwitch.setThumbTintList(controlTint());settingsRawSwitch.setTrackTintList(new android.content.res.ColorStateList(new int[][]{{android.R.attr.state_checked},{}},new int[]{0x55000000|(theme.accent&0x00ffffff),color(0x559aa397)}));settingsRawSwitch.setChecked(rawEnabled);settingsRawSection.addView(settingsRawSwitch,new LinearLayout.LayoutParams(-1,dp(48)));
         settingsRawNote=text("",11,MUTED);settingsRawNote.setPadding(0,dp(4),0,dp(4));settingsRawNote.setLineSpacing(dp(3),1);settingsRawSection.addView(settingsRawNote);updateRawControls();settingsRawSwitch.setOnCheckedChangeListener((v,on)->{if(on!=rawEnabled)setRawMode(on);});
+        settingsRawMode=groupOption("",false,false);LinearLayout.LayoutParams modeLp=new LinearLayout.LayoutParams(-1,dp(48));modeLp.topMargin=dp(8);settingsRawSection.addView(settingsRawMode,modeLp);
+        settingsRawMode.setOnClickListener(v->selectValue("RAW 测光模式",RawMeter.MODES,rawMode,i->{rawMode=i;prefs.edit().putInt("rawMode",i).apply();rawRevision++;maximum=0;spotMarker.invalidate();updateRawControls();if(rawActive&&!paused){currentEv=Double.NaN;current=Float.NaN;meterStatus="RAW 测光中";requestRawReading();}render();}));updateRawControls();
         LinearLayout cameraSettings=card();LinearLayout.LayoutParams cameraLp=new LinearLayout.LayoutParams(-1,-2);cameraLp.topMargin=dp(14);panel.addView(cameraSettings,cameraLp);cameraSettings.addView(text("相机",14,FG));
         Switch visible=new Switch(this);visible.setText("在主页面显示焦距拨轮");visible.setTextSize(13);visible.setTextColor(color(FG));visible.setPadding(0,dp(12),0,dp(8));visible.setThumbTintList(controlTint());visible.setTrackTintList(new android.content.res.ColorStateList(new int[][]{{android.R.attr.state_checked},{}},new int[]{0x55000000|(theme.accent&0x00ffffff),color(0x559aa397)}));visible.setChecked(showZoom);cameraSettings.addView(visible);
         TextView zoomNote=text("关闭后，仅在此处调节焦距",11,MUTED);zoomNote.setPadding(0,dp(4),0,dp(12));cameraSettings.addView(zoomNote);visible.setOnCheckedChangeListener((v,on)->{showZoom=on;save();renderZoom();});
@@ -176,7 +178,7 @@ if(shutterDial==null)return;status.setText(paused?"读数已保持":meterStatus)
         information.setOnClickListener(v->{settingsDialog.dismiss();showInformation();});
         ScrollView scroll=new ScrollView(this);scroll.setClipToPadding(false);scroll.addView(panel);settingsScroll=scroll;
         AlertDialog dialog=new AlertDialog.Builder(this).setCustomTitle(dialogTitle("测光设置")).setView(scroll).setPositiveButton("完成",null).create();settingsDialog=dialog;
-        dialog.setOnDismissListener(v->{settingsScrollY=scroll.getScrollY();settingsZoom=null;settingsZoomLabel=null;settingsCameraNote=null;settingsRawSection=null;settingsRawSwitch=null;settingsRawNote=null;settingsScroll=null;settingsDialog=null;});dialog.show();styleDialog(dialog);scroll.post(()->scroll.scrollTo(0,settingsScrollY));
+        dialog.setOnDismissListener(v->{settingsScrollY=scroll.getScrollY();settingsZoom=null;settingsZoomLabel=null;settingsCameraNote=null;settingsRawSection=null;settingsRawSwitch=null;settingsRawNote=null;settingsRawMode=null;settingsScroll=null;settingsDialog=null;});dialog.show();styleDialog(dialog);scroll.post(()->scroll.scrollTo(0,settingsScrollY));
     }
     private void showInformation(){
         if(informationDialog!=null&&informationDialog.isShowing())return;
@@ -185,6 +187,9 @@ if(shutterDial==null)return;status.setText(paused?"读数已保持":meterStatus)
             {"Lux 与 EV100","L = 2.5 × 2^EV100\nEV100 = log₂(L / 2.5)","EV100 是 ISO 100 下的曝光值。本 App 的 Lux 为相机测光换算的照度估算值，换算系数为 2.5。"},
             {"相机测光","EV100 = log₂(Nc² / tc) − log₂(Sc / 100)","Nc、tc、Sc 分别是手机相机的实际光圈 f 值、曝光时间和 ISO。主页选择的 ISO、ND 用于计算目标曝光组合，不改变测得的 EV100 和 Lux。"},
             {"RAW 测光","EVraw = EV相机 + log₂(G选区 / G参考)","RAW 模式读取同一帧的原始像素和曝光参数，扣除黑电平并按饱和值归一化，用绿色通道估计亮度。G参考来自相机实际自动曝光区域，无区域时使用画面平均。它沿用相机测光基准，未进行独立照度标定，Lux 仍为估算值。选区过暗、饱和或曝光尚未稳定时不输出读数。"},
+            {"RAW 点测光 · 方案来源","G = 点击位置附近圆内的平均亮度","圆形区域占可见预览面积约 1.5%，靠近边缘时保持圆形区域在画面内。参考 Nikon Z7 II / Z6 II 的点测光（约画面 1.5%）。本 App 将范围映射到手机可见预览，不使用相机感光元件上的毫米尺寸。\nhttps://onlinemanual.nikonimglib.com/z7II_z6II/en/15_technical_notes_08.html"},
+            {"RAW 中央重点 · 方案来源","G = 0.75 × G中央 + 0.25 × G外围","中央圆形区域占可见预览面积约 13%，中央区域获得总权重的 75%，圆外区域获得 25%。参考 Nikon Z7 II / Z6 II 的中央 12 mm 圆占 75% 权重；13% 是将全画幅 36×24 mm 上该圆的面积比例换算到手机预览的 App 适配值，非统一行业标准。\nhttps://onlinemanual.nikonimglib.com/z7II_z6II/en/15_technical_notes_08.html"},
+            {"RAW 平均测光 · 方案来源","G = 可见画面全部有效采样点的等权平均","参考 Sony α1 的 Entire Screen Avg.：统计全画面的平均亮度。App 仅统计用户看得到的预览范围，不包含预览裁剪之外的 RAW 像素。各模式先平均线性亮度，再换算 EV；保留相机自动曝光作为参考基准，Lux 仍未独立标定。\nhttps://helpguide.sony.net/ilc/2420/v1/en/contents/0406_metering_mode.html"},
             {"ND 减光","L' = L / 2ᵈ","L' 是经过 ND 后的有效照度。ND 每增加 1 档，通光量减半。下面的曝光公式均已计入 ND 影响。"},
             {"快门 · 曝光时间","t = (250 × N² × 2ᵈ) / (L × S)","光圈优先时，根据光圈、ISO 和 ND 计算曝光时间。t 的单位是秒，例如 1/125 秒。"},
             {"光圈","N = √[(L × S × t) / (250 × 2ᵈ)]","快门优先时，根据曝光时间、ISO 和 ND 计算光圈 f 值。f 值越小，实际光圈越大。"},
@@ -204,7 +209,7 @@ if(shutterDial==null)return;status.setText(paused?"读数已保持":meterStatus)
             LinearLayout block=card();LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=dp(12);panel.addView(block,lp);
             block.addView(text(section[0],15,FG));
             TextView formula=text(section[1],14,0xffe3c17d);formula.setPadding(0,dp(10),0,dp(8));formula.setLineSpacing(dp(5),1);block.addView(formula);
-            TextView explanation=text(section[2],12,MUTED);explanation.setLineSpacing(dp(4),1);block.addView(explanation);
+            TextView explanation=text(section[2],12,MUTED);android.text.util.Linkify.addLinks(explanation,android.text.util.Linkify.WEB_URLS);explanation.setLinkTextColor(theme.accentInk);explanation.setLineSpacing(dp(4),1);block.addView(explanation);
         }
         ScrollView scroll=new ScrollView(this);scroll.setClipToPadding(false);scroll.addView(panel);
         AlertDialog dialog=new AlertDialog.Builder(this).setCustomTitle(dialogTitle("信息")).setView(scroll).setPositiveButton("关闭",null).create();informationDialog=dialog;
@@ -264,7 +269,7 @@ private void updateRawControls(){
     boolean available=rawSupported&&camera!=null&&!cameraStarting;
     settingsRawSwitch.setEnabled(available);
     settingsRawSwitch.setAlpha(available?1f:.55f);
-    settingsRawSwitch.setChecked(rawEnabled);
+    settingsRawSwitch.setChecked(rawEnabled);if(settingsRawMode!=null){settingsRawMode.setText(RawMeter.MODES[rawMode]+"  ▾");settingsRawMode.setEnabled(available&&rawEnabled);settingsRawMode.setAlpha(available&&rawEnabled?1f:.55f);}
     settingsRawNote.setText(cameraStarting?"正在检测当前摄像头的 RAW 支持情况…":camera==null?"开启相机后可检测 RAW 支持情况。":rawSupported?
         "读取选区原始像素，以相机测光为基准校正。关闭后使用普通相机测光，Lux 均为估算值。":"当前摄像头不支持 RAW 测光，使用普通相机测光。");
 }
@@ -275,20 +280,28 @@ private void setRawMode(boolean enabled){
     meterStatus=enabled?"正在开启 RAW":"等待相机测光";
     startCamera();updateRawControls();render();
 }
+private RectF rawSelection(float w,float h){
+    if(rawMode==2)return new RectF(0,0,w,h);
+    float r=Math.min(Math.min(w,h)/2,(float)Math.sqrt(w*h*(rawMode==0?.015:.13)/Math.PI));
+    float x=rawMode==0?Math.max(r,Math.min(w-r,spotX*w)):w/2;
+    float y=rawMode==0?Math.max(r,Math.min(h-r,spotY*h)):h/2;
+    return new RectF(x-r,y-r,x+r,y+r);
+}
 private void requestRawReading(){
+
     if(rawCapture==null||rawMeter==null||rawBusy||!rawActive||!foreground||paused)return;
     Matrix sensorToView=preview.getSensorToViewTransform(),viewToSensor=new Matrix();
     if(sensorToView==null||!sensorToView.invert(viewToSensor)){meterStatus="RAW 等待预览就绪";return;}
-    float x=spotX*preview.getWidth(),y=spotY*preview.getHeight(),r=dp(18);
-    RectF selected=new RectF(Math.max(0,x-r),Math.max(0,y-r),Math.min(preview.getWidth(),x+r),Math.min(preview.getHeight(),y+r));
-    viewToSensor.mapRect(selected);
+    RectF selected=rawSelection(preview.getWidth(),preview.getHeight());
+    RectF visible=new RectF(0,0,preview.getWidth(),preview.getHeight());
+    viewToSensor.mapRect(selected);viewToSensor.mapRect(visible);int mode=rawMode;
     int generation=captureGeneration,revision=rawRevision;RawMeter meter=rawMeter;rawBusy=true;
     rawCapture.takePicture(ContextCompat.getMainExecutor(this),new ImageCapture.OnImageCapturedCallback(){
         @Override public void onCaptureSuccess(ImageProxy image){
             if(generation!=captureGeneration||!foreground){image.close();return;}
             rawExecutor.execute(()->{
                 RawMeter.Reading reading;
-                try{reading=meter.read(image,selected);}
+                try{reading=meter.read(image,selected,visible,mode);}
                 catch(InterruptedException interrupted){Thread.currentThread().interrupt();reading=RawMeter.Reading.invalid("RAW 测光已停止");}
                 catch(RuntimeException error){android.util.Log.w("Lux","RAW processing failed",error);reading=RawMeter.Reading.invalid("RAW 数据处理失败");}
                 finally{image.close();}
@@ -315,6 +328,7 @@ private void requestRawReading(){
 private void meterAt(float x,float y,boolean user){
     if(camera==null)return;
     if(rawActive){
+        if(rawMode!=0)return;
         spotX=Math.max(0,Math.min(1,x/preview.getWidth()));spotY=Math.max(0,Math.min(1,y/preview.getHeight()));
         rawRevision++;spotMarker.invalidate();
         if(!paused){currentEv=Double.NaN;current=Float.NaN;meterStatus="RAW 测光中";requestRawReading();render();}

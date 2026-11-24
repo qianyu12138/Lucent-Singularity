@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 
 /** RAW spot readings use the camera's AE reading as their reference, not a fixed RAW gray value. */
 final class RawMeter implements AutoCloseable {
+    static final String[] MODES={"点测光","中央重点测光","平均测光"};
     record Reading(double ev,String status) {
         static Reading invalid(String status){return new Reading(Double.NaN,status);}
     }
@@ -68,7 +69,7 @@ final class RawMeter implements AutoCloseable {
         return frames.remove(timestamp);
     }
 
-    Reading read(ImageProxy image,RectF selection) throws InterruptedException {
+    Reading read(ImageProxy image,RectF selection,RectF visible,int mode) throws InterruptedException {
         if(image.getFormat()!=ImageFormat.RAW_SENSOR)return Reading.invalid("RAW 图像格式不可用");
         Frame frame=frame(image.getImageInfo().getTimestamp());
         if(frame==null||!Double.isFinite(frame.ev))return Reading.invalid("RAW 曝光参数未就绪");
@@ -81,13 +82,14 @@ final class RawMeter implements AutoCloseable {
         RectF crop=frame.crop==null?new RectF(coordinates):new RectF(frame.crop);
         RectF physicalCrop=unzoom(crop,coordinates,frame.zoom);
         RectF spot=mapSelection(selection,active,physicalCrop);
+        RectF visibleRaw=mapSelection(visible,active,physicalCrop);
         RectF rawBounds=pixels!=null&&image.getWidth()==pixels.getWidth()&&image.getHeight()==pixels.getHeight()
             ?new RectF(0,0,pixels.getWidth(),pixels.getHeight()):new RectF(pre);
         Matrix sensorToRaw=new Matrix();sensorToRaw.setRectToRect(rawBounds,new RectF(0,0,image.getWidth(),image.getHeight()),Matrix.ScaleToFit.FILL);
         ImageProxy.PlaneProxy plane=image.getPlanes()[0];
         int cfa=characteristics.get(CameraCharacteristics.SENSOR_INFO_COLOR_FILTER_ARRANGEMENT);
-        Stats selected=sample(plane.getBuffer(),image.getWidth(),image.getHeight(),plane.getRowStride(),plane.getPixelStride(),
-            bufferRect(spot,sensorToRaw),frame.black,frame.white,cfa,frame.shading,bufferRect(new RectF(pre),sensorToRaw));
+        Stats selected=modeSample(plane.getBuffer(),image.getWidth(),image.getHeight(),plane.getRowStride(),plane.getPixelStride(),
+            bufferRect(spot,sensorToRaw),bufferRect(visibleRaw,sensorToRaw),mode,frame.black,frame.white,cfa,frame.shading,bufferRect(new RectF(pre),sensorToRaw));
         if(!selected.valid())return Reading.invalid(selected.clipped>.02?"RAW 选区过亮":"RAW 选区光线不足");
         double total=0,weights=0;
         if(frame.regions!=null)for(MeteringRectangle region:frame.regions){
@@ -105,7 +107,7 @@ final class RawMeter implements AutoCloseable {
             if(!reference.valid())return Reading.invalid("RAW 参考区域超出测量范围");
             total=reference.mean;weights=1;
         }
-        return new Reading(correctedEv(frame.ev,selected.mean,total/weights),"RAW 测光");
+        return new Reading(correctedEv(frame.ev,selected.mean,total/weights),"RAW · "+MODES[mode]);
     }
 
     static double correctedEv(double referenceEv,double selected,double reference){
@@ -127,8 +129,20 @@ final class RawMeter implements AutoCloseable {
     record Stats(double mean,double clipped,int count) {
         boolean valid(){return count>=16&&Double.isFinite(mean)&&mean>1e-4&&clipped<=.02;}
     }
+    static Stats modeSample(ByteBuffer buffer,int width,int height,int rowStride,int pixelStride,RectF spot,RectF visible,int mode,
+                            float[] black,int white,int cfa,LensShadingMap shading,RectF active){
+        if(mode==2)return sample(buffer,width,height,rowStride,pixelStride,visible,black,white,cfa,shading,active);
+        Stats center=sampleMasked(buffer,width,height,rowStride,pixelStride,spot,black,white,cfa,shading,active,spot,false);
+        if(mode==0)return center;
+        Stats outer=sampleMasked(buffer,width,height,rowStride,pixelStride,visible,black,white,cfa,shading,active,spot,true);
+        return new Stats(.75*center.mean+.25*outer.mean,.75*center.clipped+.25*outer.clipped,Math.min(center.count,outer.count));
+    }
     static Stats sample(ByteBuffer buffer,int width,int height,int rowStride,int pixelStride,RectF region,
                         float[] black,int white,int cfa,LensShadingMap shading,RectF active){
+        return sampleMasked(buffer,width,height,rowStride,pixelStride,region,black,white,cfa,shading,active,null,false);
+    }
+    private static Stats sampleMasked(ByteBuffer buffer,int width,int height,int rowStride,int pixelStride,RectF region,
+                        float[] black,int white,int cfa,LensShadingMap shading,RectF active,RectF ellipse,boolean outside){
         RectF r=new RectF(region);
         if(!r.intersect(0,0,width,height))return new Stats(Double.NaN,0,0);
         int left=((int)Math.ceil(r.left)+1)&~1,top=((int)Math.ceil(r.top)+1)&~1;
@@ -142,6 +156,7 @@ final class RawMeter implements AutoCloseable {
         boolean greenOdd=cfa==CameraCharacteristics.SENSOR_INFO_COLOR_FILTER_ARRANGEMENT_RGGB||cfa==CameraCharacteristics.SENSOR_INFO_COLOR_FILTER_ARRANGEMENT_BGGR;
         for(int y=top;y+1<bottom;y+=step)for(int x=left;x+1<right;x+=step)for(int i=0;i<4;i++){
             int col=i%2,row=i/2;if(!mono&&((col+row)%2==1)!=greenOdd)continue;
+            if(ellipse!=null){double nx=(x+col+.5-ellipse.centerX())/(ellipse.width()/2),ny=(y+row+.5-ellipse.centerY())/(ellipse.height()/2);if((nx*nx+ny*ny<=1)==outside)continue;}
             if(!Float.isFinite(black[i])||white<=black[i])throw new IllegalArgumentException("Invalid RAW black/white levels");
             int raw=data.getShort(base+(y+row)*rowStride+(x+col)*pixelStride)&0xffff;
             double level=(raw-black[i])/(white-black[i]);
