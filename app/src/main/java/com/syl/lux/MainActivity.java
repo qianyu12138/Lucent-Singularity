@@ -173,6 +173,13 @@ if(shutterDial==null)return;status.setText(paused?"读数已保持":meterStatus)
             {"计算示例与档位","2000 lx · ISO 100 · f/4\n无 ND → 1/50 秒\nND 1 档 → 1/25 秒","自动计算结果会匹配当前组已启用的最近档位。超出范围时，显示红色边界值和刻度警告。"}
         };
         LinearLayout panel=column();panel.setPadding(dp(20),dp(8),dp(20),dp(8));
+        LinearLayout author=card();author.setGravity(Gravity.CENTER_HORIZONTAL);author.setPadding(dp(14),dp(20),dp(14),dp(20));LinearLayout.LayoutParams authorLp=new LinearLayout.LayoutParams(-1,-2);authorLp.bottomMargin=dp(12);panel.addView(author,authorLp);
+        TextView authorTitle=text("作者声明",14,MUTED);authorTitle.setGravity(Gravity.CENTER);author.addView(authorTitle);
+        ImageView avatar=new ImageView(this);avatar.setImageResource(R.drawable.author_avatar);avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);avatar.setContentDescription("作者头像：吐着泡泡说爱你");
+        avatar.setOutlineProvider(new ViewOutlineProvider(){@Override public void getOutline(View view,android.graphics.Outline outline){outline.setOval(0,0,view.getWidth(),view.getHeight());}});avatar.setClipToOutline(true);
+        GradientDrawable avatarBorder=new GradientDrawable();avatarBorder.setShape(GradientDrawable.OVAL);avatarBorder.setColor(Color.TRANSPARENT);avatarBorder.setStroke(dp(1),theme.border);avatar.setForeground(avatarBorder);
+        LinearLayout.LayoutParams avatarLp=new LinearLayout.LayoutParams(dp(96),dp(96));avatarLp.topMargin=dp(14);avatarLp.bottomMargin=dp(12);author.addView(avatar,avatarLp);
+        TextView authorName=text("吐着泡泡说爱你",17,FG);authorName.setGravity(Gravity.CENTER);author.addView(authorName);
         for(String[] section:sections){
             LinearLayout block=card();LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=dp(12);panel.addView(block,lp);
             block.addView(text(section[0],15,FG));
