@@ -51,6 +51,7 @@ public final class MainActivity extends ComponentActivity {
     private ImageCapture jpegCapture; private boolean jpegBusy; private double jpegEv=Double.NaN; private volatile double latestEv=Double.NaN; private volatile int captureGeneration; private double currentEv=Double.NaN; private long lastFrameTime; private String meterStatus="等待相机测光";
     private boolean rawEnabled,rawSupported,rawActive,rawBusy;
     private boolean exposurePreviewMode;
+    private boolean monochrome;
     private int previewCalibration;
     private volatile ExposurePreview exposureRenderer;
     private int rawRevision,rawMode;
@@ -74,6 +75,7 @@ public final class MainActivity extends ComponentActivity {
         isoIndex=prefs.getInt("iso",2);nd=prefs.getInt("nd",0);interval=prefs.getInt("interval",1000);manualF=prefs.getBoolean("manualF",true);showZoom=prefs.getBoolean("showZoom",true);zoom=prefs.getFloat("zoom",1);
         rawEnabled=prefs.getBoolean("rawMetering",false);rawMode=prefs.getInt("rawMode",1);
         exposurePreviewMode=prefs.getBoolean("exposurePreview",false);previewCalibration=prefs.getInt("previewCalibration",0);
+        monochrome=prefs.getBoolean("monochrome",false);
         if(state!=null){currentEv=state.getDouble("ev",Double.NaN);current=state.getFloat("current",Float.NaN);maximum=state.getFloat("maximum");paused=state.getBoolean("paused");}
 
         buildPage();render();
@@ -113,7 +115,7 @@ private double[] enabled
 LinearLayout options=new LinearLayout(this);options.setGravity(Gravity.CENTER_VERTICAL);options.addView(text("ISO  ",12,MUTED));TextView iso=groupOption(ISOS[isoIndex]+"  ▾",false,false);LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(0,dp(38),1);ip.setMarginEnd(dp(12));options.addView(iso,ip);options.addView(text("ND  ",12,MUTED));String[] nds=new String[21];nds[0]="无";for(int i=1;i<21;i++)nds[i]=i+" 档";TextView filter=groupOption(nds[nd]+"  ▾",false,false);options.addView(filter,new LinearLayout.LayoutParams(0,dp(38),1));LinearLayout.LayoutParams op=new LinearLayout.LayoutParams(-1,dp(48));root.addView(options,op);iso.setOnClickListener(v->selectValue("ISO 感光度",ISOS,isoIndex,i->{isoIndex=i;iso.setText(ISOS[i]+"  ▾");save();render();}));filter.setOnClickListener(v->selectValue("ND 减光镜",nds,nd,i->{nd=i;filter.setText(nds[i]+"  ▾");save();render();}));
         status.setPadding(dp(8),dp(8),0,dp(8));status.setOnClickListener(v->switchPreviewMode());
         FrameLayout square=new FrameLayout(this);square.setBackgroundColor(BG);
-        preview=new PreviewView(this);preview.setImplementationMode(PreviewView.ImplementationMode.COMPATIBLE);preview.setScaleType(PreviewView.ScaleType.FILL_CENTER);square.addView(preview,new FrameLayout.LayoutParams(-1,-1));
+        preview=new PreviewView(this);preview.setImplementationMode(PreviewView.ImplementationMode.COMPATIBLE);preview.setScaleType(PreviewView.ScaleType.FILL_CENTER);applyColorMode();square.addView(preview,new FrameLayout.LayoutParams(-1,-1));
         spotMarker=new View(this){
             private final android.graphics.Paint p=new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
             private final android.graphics.Path path=new android.graphics.Path();
@@ -196,6 +198,14 @@ private void choosePreviewCalibration(){
     String[] levels=new String[19];for(int i=0;i<levels.length;i++)levels[i]=calibrationLabel(i-9)+(i==9?" · 默认":"");
     selectValue("预览校准 · 仅调整模拟亮度",levels,previewCalibration+9,i->{previewCalibration=i-9;prefs.edit().putInt("previewCalibration",previewCalibration).apply();render();});
 }
+private void applyColorMode(){
+    android.graphics.Paint paint=null;
+    if(monochrome){
+        android.graphics.ColorMatrix matrix=new android.graphics.ColorMatrix();matrix.setSaturation(0);
+        paint=new android.graphics.Paint();paint.setColorFilter(new android.graphics.ColorMatrixColorFilter(matrix));
+    }
+    preview.setLayerType(monochrome?View.LAYER_TYPE_HARDWARE:View.LAYER_TYPE_NONE,paint);preview.invalidate();
+}
 private String calibrationLabel(int step){return step==0?"0 EV":String.format(Locale.US,"%+.2f EV",step/3.0);}
 private void updateScreenAwake(){
     if(foreground&&!paused&&camera!=null)getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -229,6 +239,10 @@ if(exposurePreviewMode){
         LinearLayout appearance=card();LinearLayout.LayoutParams appearanceLp=new LinearLayout.LayoutParams(-1,-2);appearanceLp.bottomMargin=dp(16);panel.addView(appearance,appearanceLp);
         appearance.addView(text("主题色",14,FG));TextView themeNote=text("切换界面配色，自动保存",11,MUTED);themeNote.setPadding(0,dp(8),0,dp(12));appearance.addView(themeNote);
         TextView themeChoice=groupOption(theme.name+"  ▾",true,false);appearance.addView(themeChoice,new LinearLayout.LayoutParams(-1,dp(48)));themeChoice.setOnClickListener(v->chooseTheme());
+        TextView colorLabel=text("色彩模式",14,FG);colorLabel.setPadding(0,dp(20),0,0);appearance.addView(colorLabel);
+        TextView colorNote=text("切换摄像头画面的彩色／黑白显示，不改变测光数据",11,MUTED);colorNote.setPadding(0,dp(8),0,dp(12));appearance.addView(colorNote);
+        String[] colorModes={"彩色","黑白"};TextView colorChoice=groupOption(colorModes[monochrome?1:0]+"  ▾",false,false);appearance.addView(colorChoice,new LinearLayout.LayoutParams(-1,dp(48)));
+        colorChoice.setOnClickListener(v->selectValue("色彩模式",colorModes,monochrome?1:0,i->{monochrome=i==1;prefs.edit().putBoolean("monochrome",monochrome).apply();colorChoice.setText(colorModes[i]+"  ▾");applyColorMode();}));
         TextView caption=text("拨轮与档位 · 按器材保存常用组合",12,MUTED);caption.setPadding(0,0,0,dp(12));panel.addView(caption);
         groupSection(panel,"光圈",ALL_F,"f",true);groupSection(panel,"快门速度",ALL_T,"t",false);
         LinearLayout measurement=card();panel.addView(measurement);measurement.addView(text("测量 · 识别间隔",14,FG));
