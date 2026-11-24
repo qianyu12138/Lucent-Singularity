@@ -33,6 +33,7 @@ public final class MainActivity extends ComponentActivity {
     private SharedPreferences prefs;
     private ThemeColors theme=ThemeColors.OPTIONS[0];
     private AlertDialog settingsDialog;
+    private AlertDialog informationDialog;
     private ScrollView settingsScroll;
     private int settingsScrollY;
     private boolean reopenSettings;
@@ -59,6 +60,7 @@ public final class MainActivity extends ComponentActivity {
 
         buildPage();render();
         if(state!=null&&state.getBoolean("settingsOpen")){settingsScrollY=state.getInt("settingsScrollY");handler.post(this::showSettings);}
+        else if(state!=null&&state.getBoolean("informationOpen"))handler.post(this::showInformation);
     }
 private void migrateStops(){
     if(prefs.getInt("stopVersion",0)>=1)return;
@@ -151,9 +153,35 @@ if(shutterDial==null)return;status.setText(paused?"读数已保持":meterStatus)
         settingsZoom=new SeekBar(this);settingsZoom.setMax(Math.max(0,Math.round((maxZoom-minZoom)*10)));settingsZoom.setProgress(Math.round((zoom-minZoom)*10));settingsZoom.setEnabled(regionSupported&&maxZoom>minZoom);settingsZoom.setThumbTintList(controlTint());settingsZoom.setProgressTintList(android.content.res.ColorStateList.valueOf(theme.accent));settingsZoom.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(color(0xff363c36)));cameraSettings.addView(settingsZoom,new LinearLayout.LayoutParams(-1,dp(44)));
         settingsZoom.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar b,int p,boolean user){if(user)applyZoom(minZoom+p*.1f);}public void onStartTrackingTouch(SeekBar b){}public void onStopTrackingTouch(SeekBar b){}});
         TextView cameraNote=text(regionSupported?"与主页面实时同步":"此设备不支持区域测光，焦距调节已禁用",12,MUTED);cameraNote.setPadding(0,dp(8),0,0);cameraSettings.addView(cameraNote);renderZoom();
+        TextView information=groupOption("信息  ›",false,false);LinearLayout.LayoutParams informationLp=new LinearLayout.LayoutParams(-1,dp(52));informationLp.topMargin=dp(14);panel.addView(information,informationLp);
+        information.setOnClickListener(v->{settingsDialog.dismiss();showInformation();});
         ScrollView scroll=new ScrollView(this);scroll.setClipToPadding(false);scroll.addView(panel);settingsScroll=scroll;
         AlertDialog dialog=new AlertDialog.Builder(this).setCustomTitle(dialogTitle("测光设置")).setView(scroll).setPositiveButton("完成",null).create();settingsDialog=dialog;
         dialog.setOnDismissListener(v->{settingsScrollY=scroll.getScrollY();settingsZoom=null;settingsZoomLabel=null;settingsScroll=null;settingsDialog=null;});dialog.show();styleDialog(dialog);scroll.post(()->scroll.scrollTo(0,settingsScrollY));
+    }
+    private void showInformation(){
+        if(informationDialog!=null&&informationDialog.isShowing())return;
+        String[][] sections={
+            {"符号与单位","N：光圈 f 值\nt：曝光时间（秒）\nS：ISO 感光度\nd：ND 减光档数\nL：滤镜前照度（lx）","log₂ 表示以 2 为底的对数，2ᵈ 表示 2 的 d 次方。无 ND 时，d = 0。"},
+            {"Lux 与 EV100","L = 2.5 × 2^EV100\nEV100 = log₂(L / 2.5)","EV100 是 ISO 100 下的曝光值。本 App 的 Lux 为相机测光换算的照度估算值，换算系数为 2.5。"},
+            {"相机测光","EV100 = log₂(Nc² / tc)\n− log₂(Sc / 100)","Nc、tc、Sc 分别是手机相机的实际光圈 f 值、曝光时间和 ISO。主页选择的 ISO、ND 用于计算目标曝光组合，不改变测得的 EV100 和 Lux。"},
+            {"ND 减光","L' = L / 2ᵈ","L' 是经过 ND 后的有效照度。ND 每增加 1 档，通光量减半。下面的曝光公式均已计入 ND 影响。"},
+            {"快门 · 曝光时间","t = (250 × N² × 2ᵈ) / (L × S)","光圈优先时，根据光圈、ISO 和 ND 计算曝光时间。t 的单位是秒，例如 1/125 秒。"},
+            {"光圈","N = √[(L × S × t) / (250 × 2ᵈ)]","快门优先时，根据曝光时间、ISO 和 ND 计算光圈 f 值。f 值越小，实际光圈越大。"},
+            {"ISO 感光度","S = (250 × N² × 2ᵈ) / (L × t)","固定照度、光圈、曝光时间和 ND 时，可据此反推 ISO。App 内的 ISO 由你手动选择。"},
+            {"ND 档数","d = log₂[(L × S × t) / (250 × N²)]","固定照度、光圈、曝光时间和 ISO 时，可据此反推 ND 档数。App 内的 ND 由你手动选择。"},
+            {"计算示例与档位","2000 lx · ISO 100 · f/4\n无 ND → 1/50 秒\nND 1 档 → 1/25 秒","自动计算结果会匹配当前组已启用的最近档位。超出范围时，显示红色边界值和刻度警告。"}
+        };
+        LinearLayout panel=column();panel.setPadding(dp(20),dp(8),dp(20),dp(8));
+        for(String[] section:sections){
+            LinearLayout block=card();LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=dp(12);panel.addView(block,lp);
+            block.addView(text(section[0],15,FG));
+            TextView formula=text(section[1],14,0xffe3c17d);formula.setPadding(0,dp(10),0,dp(8));formula.setLineSpacing(dp(5),1);block.addView(formula);
+            TextView explanation=text(section[2],12,MUTED);explanation.setLineSpacing(dp(4),1);block.addView(explanation);
+        }
+        ScrollView scroll=new ScrollView(this);scroll.setClipToPadding(false);scroll.addView(panel);
+        AlertDialog dialog=new AlertDialog.Builder(this).setCustomTitle(dialogTitle("信息")).setView(scroll).setPositiveButton("关闭",null).create();informationDialog=dialog;
+        dialog.setOnDismissListener(v->informationDialog=null);dialog.show();styleDialog(dialog);
     }
     private void chooseTheme(){
         String[] names=new String[ThemeColors.OPTIONS.length];int selected=0;for(int i=0;i<names.length;i++){names[i]=ThemeColors.OPTIONS[i].name;if(ThemeColors.OPTIONS[i]==theme)selected=i;}
@@ -228,9 +256,9 @@ private void applyZoom
                 handler.post(()->{if(!foreground||generation!=captureGeneration)return;lastFrameTime=SystemClock.elapsedRealtime();meterStatus=Double.isFinite(ev)?"相机测光":"相机未提供有效曝光参数";});
             }
         });Preview useCase=builder.build();useCase.setSurfaceProvider(preview.getSurfaceProvider());provider.unbindAll();jpegCapture=new ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build();camera=provider.bindToLifecycle(this,selector,useCase,jpegCapture);Integer regions=Camera2CameraInfo.from(camera.getCameraInfo()).getCameraCharacteristic(CameraCharacteristics.CONTROL_MAX_REGIONS_AE);regionSupported=regions!=null&&regions>0;ZoomState z=camera.getCameraInfo().getZoomState().getValue();if(z!=null){minZoom=z.getMinZoomRatio();maxZoom=z.getMaxZoomRatio();}if(regionSupported)applyZoom(zoom);else zoom=z==null?1:z.getZoomRatio();cameraMessage.setVisibility(View.GONE);spotMarker.invalidate();preview.post(()->{if(foreground&&camera!=null)meterAt(preview.getWidth()*.5f,preview.getHeight()*.5f,false);});render();}catch(Exception e){android.util.Log.e("Lux","Camera start failed",e);camera=null;regionSupported=false;cameraMessage.setVisibility(View.VISIBLE);cameraMessage.setText("相机启动失败，点击重试");meterStatus="相机启动失败";render();}},ContextCompat.getMainExecutor(this));}
-    @Override protected void onDestroy(){if(settingsDialog!=null)settingsDialog.dismiss();super.onDestroy();}
+    @Override protected void onDestroy(){if(settingsDialog!=null)settingsDialog.dismiss();if(informationDialog!=null)informationDialog.dismiss();super.onDestroy();}
     @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){super.onRequestPermissionsResult(code,permissions,results);if(code==10){if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)startCamera();else cameraMessage.setText("未授权相机 · 点击重试或在系统设置开启");}}
     @Override protected void onResume(){super.onResume();foreground=true;latestEv=Double.NaN;meterStatus="等待相机测光";handler.post(sample);startCamera();}
     @Override protected void onPause(){foreground=false;updateScreenAwake();handler.removeCallbacks(sample);captureGeneration++;jpegCapture=null;jpegBusy=false;jpegEv=Double.NaN;latestEv=Double.NaN;if(provider!=null)provider.unbindAll();camera=null;regionSupported=false;super.onPause();}
-    @Override protected void onSaveInstanceState(Bundle b){b.putBoolean("settingsOpen",reopenSettings||(settingsDialog!=null&&settingsDialog.isShowing()));b.putInt("settingsScrollY",settingsScroll==null?settingsScrollY:settingsScroll.getScrollY());b.putDouble("ev",currentEv);b.putFloat("current",current);b.putFloat("maximum",maximum);b.putBoolean("paused",paused);super.onSaveInstanceState(b);}
+    @Override protected void onSaveInstanceState(Bundle b){b.putBoolean("settingsOpen",reopenSettings||(settingsDialog!=null&&settingsDialog.isShowing()));b.putBoolean("informationOpen",informationDialog!=null&&informationDialog.isShowing());b.putInt("settingsScrollY",settingsScroll==null?settingsScrollY:settingsScroll.getScrollY());b.putDouble("ev",currentEv);b.putFloat("current",current);b.putFloat("maximum",maximum);b.putBoolean("paused",paused);super.onSaveInstanceState(b);}
 }
