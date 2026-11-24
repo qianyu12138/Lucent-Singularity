@@ -109,11 +109,47 @@ private double[] enabled
 LinearLayout options=new LinearLayout(this);options.setGravity(Gravity.CENTER_VERTICAL);options.addView(text("ISO  ",12,MUTED));TextView iso=groupOption(ISOS[isoIndex]+"  ▾",false,false);LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(0,dp(38),1);ip.setMarginEnd(dp(12));options.addView(iso,ip);options.addView(text("ND  ",12,MUTED));String[] nds=new String[21];nds[0]="无";for(int i=1;i<21;i++)nds[i]=i+" 档";TextView filter=groupOption(nds[nd]+"  ▾",false,false);options.addView(filter,new LinearLayout.LayoutParams(0,dp(38),1));LinearLayout.LayoutParams op=new LinearLayout.LayoutParams(-1,dp(48));root.addView(options,op);iso.setOnClickListener(v->selectValue("ISO 感光度",ISOS,isoIndex,i->{isoIndex=i;iso.setText(ISOS[i]+"  ▾");save();render();}));filter.setOnClickListener(v->selectValue("ND 减光镜",nds,nd,i->{nd=i;filter.setText(nds[i]+"  ▾");save();render();}));
         FrameLayout square=new FrameLayout(this);square.setBackgroundColor(BG);
         preview=new PreviewView(this);preview.setImplementationMode(PreviewView.ImplementationMode.COMPATIBLE);preview.setScaleType(PreviewView.ScaleType.FILL_CENTER);square.addView(preview,new FrameLayout.LayoutParams(-1,-1));
-        spotMarker=new View(this){private final android.graphics.Paint p=new android.graphics.Paint(3);@Override protected void onDraw(android.graphics.Canvas c){super.onDraw(c);if(!regionSupported&&!focusSupported&&!rawActive)return;p.setColor(theme.accent);p.setStyle(android.graphics.Paint.Style.STROKE);p.setStrokeWidth(dp(1));if(rawActive){if(rawMode==2)return;RectF area=rawSelection(getWidth(),getHeight());c.drawOval(area,p);return;}float x=spotX*getWidth(),y=spotY*getHeight(),r=dp(18);c.drawRect(x-r,y-r,x+r,y+r,p);c.drawLine(x-dp(5),y,x+dp(5),y,p);c.drawLine(x,y-dp(5),x,y+dp(5),p);}};
-        square.addView(spotMarker,new FrameLayout.LayoutParams(-1,-1));
+        spotMarker=new View(this){
+            private final android.graphics.Paint p=new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+            private final android.graphics.Path path=new android.graphics.Path();
+            private final android.graphics.DashPathEffect dashed=new android.graphics.DashPathEffect(new float[]{dp(5),dp(5)},0);
+            @Override protected void onDraw(android.graphics.Canvas c){
+                super.onDraw(c);
+                if(!regionSupported&&!focusSupported&&!rawActive)return;
+                p.setColor(Color.WHITE);p.setAlpha(255);p.setStyle(android.graphics.Paint.Style.STROKE);
+                p.setStrokeWidth(getResources().getDisplayMetrics().density*1.25f);
+                p.setStrokeCap(android.graphics.Paint.Cap.ROUND);p.setStrokeJoin(android.graphics.Paint.Join.ROUND);
+                p.setPathEffect(null);p.setShadowLayer(dp(1),0,dp(1),0xaa000000);path.reset();
+                if(rawActive&&rawMode==1){
+                    p.setPathEffect(dashed);c.drawOval(rawSelection(getWidth(),getHeight()),p);return;
+                }
+                if(rawActive&&rawMode==2){
+                    p.setAlpha(204);float inset=dp(9);
+                    c.drawRoundRect(inset,inset,getWidth()-inset,getHeight()-inset,dp(4),dp(4),p);return;
+                }
+                float x=spotX*getWidth(),y=spotY*getHeight();
+                if(rawActive){
+                    RectF area=rawSelection(getWidth(),getHeight());x=area.centerX();y=area.centerY();
+                    path.moveTo(x,y-dp(10));path.lineTo(x,y-dp(4));
+                    path.moveTo(x,y+dp(4));path.lineTo(x,y+dp(10));
+                    path.moveTo(x-dp(10),y);path.lineTo(x-dp(4),y);
+                    path.moveTo(x+dp(4),y);path.lineTo(x+dp(10),y);
+                    c.drawPath(path,p);p.setStyle(android.graphics.Paint.Style.FILL);c.drawCircle(x,y,getResources().getDisplayMetrics().density*.8f,p);return;
+                }
+                float r=dp(20),corner=dp(8);
+                x=Math.max(r,Math.min(getWidth()-r,x));y=Math.max(r,Math.min(getHeight()-r,y));
+                path.moveTo(x-r+corner,y-r);path.lineTo(x-r,y-r);path.lineTo(x-r,y-r+corner);
+                path.moveTo(x+r-corner,y-r);path.lineTo(x+r,y-r);path.lineTo(x+r,y-r+corner);
+                path.moveTo(x-r,y+r-corner);path.lineTo(x-r,y+r);path.lineTo(x-r+corner,y+r);
+                path.moveTo(x+r,y+r-corner);path.lineTo(x+r,y+r);path.lineTo(x+r-corner,y+r);
+                path.moveTo(x-dp(3),y);path.lineTo(x+dp(3),y);path.moveTo(x,y-dp(3));path.lineTo(x,y+dp(3));c.drawPath(path,p);
+            }
+        };
+        spotMarker.setLayerType(View.LAYER_TYPE_SOFTWARE,null);spotMarker.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         GestureDetector taps=new GestureDetector(this,new GestureDetector.SimpleOnGestureListener(){@Override public boolean onDown(MotionEvent e){return true;}@Override public boolean onSingleTapUp(MotionEvent e){meterAt(e.getX(),e.getY(),true);return true;}});
         square.setOnTouchListener((v,event)->{boolean handled=taps.onTouchEvent(event);if(event.getActionMasked()==MotionEvent.ACTION_UP)v.performClick();return handled;});
         LinearLayout readouts=new LinearLayout(this);readouts.setPadding(dp(16),dp(12),dp(16),dp(12));readouts.setBackgroundColor(0xbb141716);LinearLayout l=column();l.addView(cameraText("光照强度 · lx",11,MUTED));luxText=cameraText("—",28,FG);l.addView(luxText);LinearLayout e=column();e.addView(cameraText("曝光值 · EV100",11,MUTED));evText=cameraText("—",28,FG);e.addView(evText);readouts.addView(l,new LinearLayout.LayoutParams(0,-2,1));readouts.addView(e,new LinearLayout.LayoutParams(0,-2,1));sourceText=cameraText("相机测光\n换算 Lux",11,MUTED);readouts.addView(sourceText);square.addView(readouts,new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM));
+        square.addView(spotMarker,new FrameLayout.LayoutParams(-1,-1));
         cameraMessage=cameraText("点击开启相机预览",14,FG);cameraMessage.setGravity(Gravity.CENTER);square.addView(cameraMessage,new FrameLayout.LayoutParams(-1,-1));cameraMessage.setOnClickListener(v->{if(checkSelfPermission(Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED)startCamera();else requestPermissions(new String[]{Manifest.permission.CAMERA},10);});LinearLayout.LayoutParams picture=new LinearLayout.LayoutParams(-1,0,1);root.addView(square,picture);
         rawBadge=cameraText("RAW",11,FG);rawBadge.setGravity(Gravity.CENTER);rawBadge.setTypeface(null,android.graphics.Typeface.BOLD);rawBadge.setContentDescription("RAW 测光已开启");rawBadge.setPadding(dp(10),dp(5),dp(10),dp(5));GradientDrawable badgeBackground=new GradientDrawable();badgeBackground.setColor(0xcc141716);badgeBackground.setCornerRadius(dp(6));badgeBackground.setStroke(dp(1),0x99ffffff);rawBadge.setBackground(badgeBackground);rawBadge.setVisibility(View.GONE);FrameLayout.LayoutParams badgeLp=new FrameLayout.LayoutParams(-2,-2,Gravity.TOP|Gravity.END);badgeLp.topMargin=dp(12);badgeLp.setMarginEnd(dp(12));square.addView(rawBadge,badgeLp);
         zoomDial=new DialView(this);zoomDial.theme(theme);LinearLayout.LayoutParams zp=new LinearLayout.LayoutParams(-1,dp(78));zp.topMargin=dp(6);root.addView(zoomDial,zp);zoomDial.listener(new DialView.Listener(){public void manual(){}public void changed(int i){applyZoom(minZoom+i*.1f);}});
