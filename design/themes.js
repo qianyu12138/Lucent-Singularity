@@ -64,6 +64,32 @@
         'state-bg': '#fdf6e3', 'state-text': '#586e75', 'on-accent': '#fdf6e3',
         danger: '#dc322f', 'danger-text': '#cb4b16', 'danger-bg': '#fdf6e3'
       }
+    },
+    dawn: {
+      name: 'Rosé Pine Dawn · 暖白', short: 'Dawn', mode: 'light',
+      description: '暖白纸感背景、深灰紫读数，以少量豆沙色标记手动控制。',
+      source: 'https://rosepinetheme.com/palette/',
+      colors: {
+        bg: '#faf4ed', stage: '#f2e9e1', surface: '#fffaf3', card: '#fffaf3',
+        input: '#faf4ed', line: '#cecacd', text: '#464261', muted: '#625e78',
+        accent: '#b4637a', 'accent-ink': '#464261', selected: '#f2e9e1',
+        'selected-line': '#b4637a', 'manual-text': '#464261', 'manual-label': '#625e78',
+        'state-bg': '#fffaf3', 'state-text': '#464261', 'on-accent': '#fffaf3',
+        danger: '#b4233b', 'danger-text': '#b4233b', 'danger-bg': '#faf4ed'
+      }
+    },
+    sage: {
+      name: 'Radix Sage · 鼠尾草浅绿', short: 'Sage', mode: 'light',
+      description: '清淡灰绿背景、深色读数，绿色只用于刻度与选中标记。',
+      source: 'https://www.radix-ui.com/colors/docs/palette-composition/composing-a-palette',
+      colors: {
+        bg: '#eef1f0', stage: '#dfe2e0', surface: '#f7f9f8', card: '#fbfdfc',
+        input: '#fbfdfc', line: '#b8bcba', text: '#1a211e', muted: '#5f6563',
+        accent: '#208368', 'accent-ink': '#1d3b31', selected: '#e6e9e8',
+        'selected-line': '#208368', 'manual-text': '#1a211e', 'manual-label': '#5f6563',
+        'state-bg': '#fbfdfc', 'state-text': '#1d3b31', 'on-accent': '#fbfdfc',
+        danger: '#b4233b', 'danger-text': '#b4233b', 'danger-bg': '#fbfdfc'
+      }
     }
   };
 
