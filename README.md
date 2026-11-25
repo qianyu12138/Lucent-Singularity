@@ -2,7 +2,7 @@
 
 基于手机摄像头的 Android 测光工具，提供普通相机测光、RAW 自定义区域测光，以及可同时调整快门与光圈的曝光模拟预览。
 
-当前版本：**1.0.1**（versionCode 2） · 包名：`com.syl.lux` · 最低 Android 8.0（API 26）。
+当前版本：**1.0.1**（versionCode 2） · 包名：`com.qianyu.lux` · 最低 Android 8.0（API 26）。
 
 ## 功能与操作
 
@@ -123,7 +123,7 @@ cp app/build/outputs/apk/release/app-release.apk \
 ```sh
 adb devices
 adb install --no-incremental -r app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -n com.syl.lux/.MainActivity
+adb shell am start -n com.qianyu.lux/.MainActivity
 ```
 
 多设备时通过 `adb -s <设备序列号>` 指定目标。Debug 与 Release 签名不同，不能直接互相覆盖安装。相机权限需在设备上授权；模拟器的 RAW、AF／AE 区域和变焦能力由其摄像头实现决定，不能代表所有真机。
@@ -132,12 +132,12 @@ adb shell am start -n com.syl.lux/.MainActivity
 
 | 路径 | 职责 |
 | --- | --- |
-| `app/src/main/java/com/syl/lux/MainActivity.java` | 主界面、设置、相机生命周期、交互与测光结果展示。 |
-| `app/src/main/java/com/syl/lux/ExposureCalculator.java` | EV、光圈、快门和曝光预览增益计算。 |
-| `app/src/main/java/com/syl/lux/RawMeter.java` | RAW 帧匹配、亮度取样、区域权重及相对修正。 |
-| `app/src/main/java/com/syl/lux/ExposurePreview.java` | CameraEffect／OpenGL 实时曝光模拟与资源释放。 |
-| `app/src/main/java/com/syl/lux/DialView.java` | 拨轮、档位、渐隐刻度、触感与手势。 |
-| `app/src/main/java/com/syl/lux/ThemeColors.java` | 界面主题色。 |
+| `app/src/main/java/com/qianyu/lux/MainActivity.java` | 主界面、设置、相机生命周期、交互与测光结果展示。 |
+| `app/src/main/java/com/qianyu/lux/ExposureCalculator.java` | EV、光圈、快门和曝光预览增益计算。 |
+| `app/src/main/java/com/qianyu/lux/RawMeter.java` | RAW 帧匹配、亮度取样、区域权重及相对修正。 |
+| `app/src/main/java/com/qianyu/lux/ExposurePreview.java` | CameraEffect／OpenGL 实时曝光模拟与资源释放。 |
+| `app/src/main/java/com/qianyu/lux/DialView.java` | 拨轮、档位、渐隐刻度、触感与手势。 |
+| `app/src/main/java/com/qianyu/lux/ThemeColors.java` | 界面主题色。 |
 | `design/index.html` | 主界面、设置与配色的 HTML 设计稿。 |
 | `design/metering.html` | 四种测光标记的交互设计稿。 |
 

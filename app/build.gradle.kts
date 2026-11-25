@@ -6,10 +6,10 @@ val releaseKeys = Properties().apply {
 }
 
 android {
-    namespace = "com.syl.lux"
+    namespace = "com.qianyu.lux"
     compileSdk = 36
     defaultConfig {
-        applicationId = "com.syl.lux"
+        applicationId = "com.qianyu.lux"
         minSdk = 26
         targetSdk = 36
         versionCode = 2

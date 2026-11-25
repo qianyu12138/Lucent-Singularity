@@ -1,4 +1,4 @@
-package com.syl.lux;
+package com.qianyu.lux;
 
 /** Runtime UI colors; launcher and startup resources do not use this palette. */
 final class ThemeColors {

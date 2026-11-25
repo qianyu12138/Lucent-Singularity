@@ -1,4 +1,4 @@
-package com.syl.lux;
+package com.qianyu.lux;
 
 final class ExposureCalculator {
     private ExposureCalculator() { }

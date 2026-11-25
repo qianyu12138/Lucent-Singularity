@@ -1,4 +1,4 @@
-package com.syl.lux;
+package com.qianyu.lux;
 
 import android.Manifest;
 import android.app.AlertDialog;
