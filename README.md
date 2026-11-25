@@ -143,4 +143,4 @@ adb shell am start -n com.qianyu.lux/.MainActivity
 
 设计稿可在浏览器中打开，使用模拟场景与读数，不连接真实摄像头；部分文案与交互可能落后于 App，应以当前代码和实际 App 为准。
 
-作者：**吐着泡泡说爱你**。
+作者：**千羽**。
